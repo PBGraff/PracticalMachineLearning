@@ -1,0 +1,69 @@
+---
+title: "Practical Machine Learning Course Project:  Weight Lifting Exercise"
+author: "Philip Graff"
+date: "September 15, 2014"
+output: html_document
+---
+
+## Introduction
+There are currently many self-monitoring devices on the market, such as *Jawbone Up*, *Nike FuelBand*, and *Fitbit*. These allow the wearers to collect a large amount of data about their personal activity and have helped start the 'quantified self' movement. In this project, we analyze the data from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants as they perform barbell lifts in 5 different ways. Using this recorded data, we create a model and predict how lift was performed.
+
+The five methods are as follows:
+
+1. exactly according to the specification (A)
+1. throwing the elbows to the front (B)
+1. lifting the dumbbell only halfway (C)
+1. lowering the dumbbell only halfway (D)
+1. throwing the hips to the front (E)
+
+More information about the data is available from <http://groupware.les.inf.puc-rio.br/har> and the paper:  Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+## Loading packages
+Several packages will be needed for this analysis. Let's load them in the beginning to have the tools available throughout.
+```{r,results='hide',cache=TRUE}
+require(ggplot2,quietly=TRUE)
+require(lattice,quietly=TRUE)
+require(caret,quietly=TRUE)
+require(rattle,quietly=TRUE)
+require(rpart,quietly=TRUE)
+#require(randomforest,quietly=TRUE)
+```
+
+## Obtaining and Cleaning the Data
+We begin by downloading the training and test data (tested 15 Sept 2014) and then loading it into data frames.
+```{r,results='hide',cache=TRUE}
+#download.file(url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",destfile="pml-training.csv",method="curl")
+#download.file(url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",destfile="pml-testing.csv",method="curl")
+training <- read.csv("pml-training.csv",header=TRUE)
+testing <-  read.csv("pml-testing.csv",header=TRUE)
+```
+
+Many columns are mostly 'NA' values while others have none, so we begin by eliminating those with 'NA' values. We then eliminate columns that are timestamps, since these are irrelevant for our task. We also eliminate the first two columns, as they are just a trial number and name of the lifter.
+```{r,results='hide',cache=TRUE}
+colKeep <- colSums(is.na(training))==0
+training <- training[,colKeep]
+testing <- testing[,colKeep]
+timeCols <- grep("timestamp",names(training))
+training <- training[,-c(1,2,timeCols)]
+testing <- testing[,-c(1,2,timeCols)]
+```
+
+In our final removal of possible predictors, we eliminate those variables that have a near-zero variance. As these do not vary significantly between different trials, they will be poor predictors.
+```{r,results='hide',cache=TRUE}
+nzv <- nearZeroVar(training)
+training <- training[,-nzv]
+testing <- testing[,-nzv]
+```
+This leaves us with 53 predictor variables to use to predict the 'classe' variable, which is the method in whch the lift was performed.
+
+## Exploratory Analysis
+
+
+## Fitting Models
+
+
+## Predictions on 20 Test Cases
+
+
+## Conclusions
+
