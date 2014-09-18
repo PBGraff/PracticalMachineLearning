@@ -26,24 +26,30 @@ require(lattice,quietly=TRUE)
 require(caret,quietly=TRUE)
 require(rattle,quietly=TRUE)
 require(rpart,quietly=TRUE)
-#require(randomforest,quietly=TRUE)
+require(randomForest,quietly=TRUE)
+require(plyr,quietly=TRUE)
+require(gbm,quietly=TRUE)
+require(klaR,quietly=TRUE)
+require(kernlab,quietly=TRUE)
 ```
 
 ## Obtaining and Cleaning the Data
 We begin by downloading the training and test data (tested 15 Sept 2014) and then loading it into data frames.
 ```{r,results='hide',cache=TRUE}
-#download.file(url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",destfile="pml-training.csv",method="curl")
-#download.file(url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",destfile="pml-testing.csv",method="curl")
+if( !file.exists("pml-training.csv") )
+        download.file(url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",destfile="pml-training.csv",method="curl")
+if( !file.exists("pml-testing.csv") )
+        download.file(url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",destfile="pml-testing.csv",method="curl")
 training <- read.csv("pml-training.csv",header=TRUE)
 testing <-  read.csv("pml-testing.csv",header=TRUE)
 ```
 
-Many columns are mostly 'NA' values while others have none, so we begin by eliminating those with 'NA' values. We then eliminate columns that are timestamps, since these are irrelevant for our task. We also eliminate the first two columns, as they are just a trial number and name of the lifter.
+Many columns are mostly 'NA' values while others have none, so we begin by eliminating those with 'NA' values. We then eliminate columns that are timestamps and window information, since these are irrelevant for our task. We also eliminate the first two columns, as they are just a trial number and name of the lifter.
 ```{r,results='hide',cache=TRUE}
 colKeep <- colSums(is.na(training))==0
 training <- training[,colKeep]
 testing <- testing[,colKeep]
-timeCols <- grep("timestamp",names(training))
+timeCols <- grep("timestamp|window",names(training))
 training <- training[,-c(1,2,timeCols)]
 testing <- testing[,-c(1,2,timeCols)]
 ```
@@ -54,13 +60,75 @@ nzv <- nearZeroVar(training)
 training <- training[,-nzv]
 testing <- testing[,-nzv]
 ```
-This leaves us with 53 predictor variables to use to predict the 'classe' variable, which is the method in whch the lift was performed.
+This leaves us with 52 predictor variables to use to predict the 'classe' variable, which is the method in whch the lift was performed.
 
 ## Exploratory Analysis
-
+For an initial analysis of the complexity of the problem, we begin by creating a subset of a random 5% of the data. With this data, we fit a single decision tree and analyze this to determine how well it performs.
+```{r,cache=TRUE}
+set.seed(1867)
+smallTrain<-training[createDataPartition(training$classe,p=0.05,list=FALSE),]
+modExpFit<-train(smallTrain$classe~.,data=smallTrain,method="rpart")
+```
+```{r,cache=TRUE}
+fancyRpartPlot(modExpFit$finalModel,sub = "Sample Decision Tree")
+confusionMatrix(smallTrain$classe,predict(modExpFit,smallTrain))
+```
+It is clear from the confusion matrix that this classification method does only moderately well. A more sophisticated approach is required.
 
 ## Fitting Models
+In this seciton, we will fit and test various models in order to find which performs the best.
 
+### Evaluation data
+The first thing we need to do, however, is create a subset of the training data that can be used for evaluating the model fits and comparing against one another. Accuracy on this set will determine which is used for the final 20 examples.
+```{r,cache=TRUE}
+set.seed(1066)
+inTrain <- createDataPartition(training$classe,p=0.8,list=FALSE)
+trainDat <- training[inTrain,]
+testDat <- training[-inTrain,]
+```
+
+### Random Forests
+The first model we train on the data is a random forest. We use the default setting of 500 trees and use 10-fold cross-validation for model fitting, where in each fold 90% of data is used for training and the remaining 10% for evaluation. The stats on this model fit are displayed below. We see that the random forest performs very well, with an out-of-bag error of only 0.57%.
+```{r,cache=TRUE}
+set.seed(12345)
+modRF <- train(classe~., data=trainDat, method="rf", trControl = trainControl(method = "cv", number = 10))
+modRF$finalModel
+```
+
+This random forest must be evaluated on the test data we prepared for proper comparison with other methods.
+```{r,cache=TRUE}
+confMatRF <- confusionMatrix(testDat$classe,predict(modRF,testDat))
+confMatRF
+```
+We see an accuracy of **`r confMatRF$overall[1]*100`%** for the random forest method.
+
+### Generalized Boosted Modeling with Trees
+The next model to fit to the data involves boosted decision trees via the GBM method. This will train many decision trees sequentially, each time increasing the weight of data points predicted incorrectly the previous time and decreasing those that were predicted correctly. By combining the many trees, this produces a stronger predictor. Furthermore, GBM uses greedy selection of basis functions to improve classification. Cross-validation is used with 10 folds.
+```{r,cache=TRUE}
+set.seed(54321)
+modGBM <- train(classe~., data=trainDat, method="gbm", verbose = FALSE, trControl = trainControl(method = "cv", number = 10))
+modGBM$finalModel
+```
+
+This ensemble of boosted trees must then be evaluated on the test data we prepared for proper comparison with other methods.
+```{r,cache=TRUE}
+confMatGBM <- confusionMatrix(testDat$classe,predict(modGBM,testDat))
+confMatGBM
+```
+We see an accuracy of **`r confMatGBM$overall[1]*100`%** for the AdaBoost method.
+
+### Naive Bayes
+do PCA, method="nb"
+
+### Linear Discriminant Analysis
+do PCA, method="lda"
+
+### Support Vector Machines
+with radial basis function kernel, do PCA, method="svmRadial"
+
+### Neural Networks
+deep neural nets with method="dnn"
+stacked autoencoder with dropout
 
 ## Predictions on 20 Test Cases
 
