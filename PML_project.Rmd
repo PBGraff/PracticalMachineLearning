@@ -20,7 +20,7 @@ More information about the data is available from <http://groupware.les.inf.puc-
 
 ## Loading packages
 Several packages will be needed for this analysis. Let's load them in the beginning to have the tools available throughout.
-```{r,results='hide',cache=TRUE}
+```{r,results='hide',cache=TRUE,warning=FALSE}
 require(ggplot2,quietly=TRUE)
 require(lattice,quietly=TRUE)
 require(caret,quietly=TRUE)
@@ -29,8 +29,10 @@ require(rpart,quietly=TRUE)
 require(randomForest,quietly=TRUE)
 require(plyr,quietly=TRUE)
 require(gbm,quietly=TRUE)
+require(e1071,quietly=TRUE)
 require(klaR,quietly=TRUE)
 require(kernlab,quietly=TRUE)
+require(deepnet,quietly=TRUE)
 ```
 
 ## Obtaining and Cleaning the Data
@@ -69,7 +71,7 @@ set.seed(1867)
 smallTrain<-training[createDataPartition(training$classe,p=0.05,list=FALSE),]
 modExpFit<-train(smallTrain$classe~.,data=smallTrain,method="rpart")
 ```
-```{r,cache=TRUE}
+```{r,cache=TRUE,echo=FALSE}
 fancyRpartPlot(modExpFit$finalModel,sub = "Sample Decision Tree")
 confusionMatrix(smallTrain$classe,predict(modExpFit,smallTrain))
 ```
@@ -92,12 +94,16 @@ The first model we train on the data is a random forest. We use the default sett
 ```{r,cache=TRUE}
 set.seed(12345)
 modRF <- train(classe~., data=trainDat, method="rf", trControl = trainControl(method = "cv", number = 10))
+```
+```{r,cache=TRUE,echo=FALSE}
 modRF$finalModel
 ```
 
 This random forest must be evaluated on the test data we prepared for proper comparison with other methods.
 ```{r,cache=TRUE}
 confMatRF <- confusionMatrix(testDat$classe,predict(modRF,testDat))
+```
+```{r,cache=TRUE,echo=FALSE}
 confMatRF
 ```
 We see an accuracy of **`r confMatRF$overall[1]*100`%** for the random forest method.
@@ -107,31 +113,73 @@ The next model to fit to the data involves boosted decision trees via the GBM me
 ```{r,cache=TRUE}
 set.seed(54321)
 modGBM <- train(classe~., data=trainDat, method="gbm", verbose = FALSE, trControl = trainControl(method = "cv", number = 10))
-modGBM$finalModel
+```
+```{r,cache=TRUE,echo=FALSE}
+modGBM
 ```
 
 This ensemble of boosted trees must then be evaluated on the test data we prepared for proper comparison with other methods.
 ```{r,cache=TRUE}
 confMatGBM <- confusionMatrix(testDat$classe,predict(modGBM,testDat))
+```
+```{r,cache=TRUE,echo=FALSE}
 confMatGBM
 ```
-We see an accuracy of **`r confMatGBM$overall[1]*100`%** for the AdaBoost method.
+We see an accuracy of **`r confMatGBM$overall[1]*100`%** for generalized boosted modeling with trees.
 
 ### Naive Bayes
-do PCA, method="nb"
+The next machine learning method that we try is Naive Bayes. In this, each variable is assumed to be independent to fit a probability density model to the training data. We first use Naive Bayes on the raw parameter values and then train a similar model using principal component analysis for pre-processing. The PCA may help by creating more useful and more independent features to use for training.
+```{r,cache=TRUE}
+set.seed(9069)
+modNB <- train(classe~., data=trainDat, method="nb", trControl = trainControl(method = "cv", number = 10))
+set.seed(1208)
+modNBpca <- train(classe~., data=trainDat, method="nb", preProcess = "pca", trControl = trainControl(method = "cv", number = 10))
+```
 
-### Linear Discriminant Analysis
-do PCA, method="lda"
+These two Naive Bayes models are now evaluated on the test data set in order for proper comparison to the other results.
+```{r,cache=TRUE}
+confMatNB <- confusionMatrix(testDat$classe,predict(modNB,testDat))
+confMatNBpca <- confusionMatrix(testDat$classe,predict(modNBpca,testDat))
+```
+```{r,cache=TRUE,echo=FALSE}
+confMatNB
+confMatNBpca
+```
+We see an accuracy of **`r confMatNB$overall[1]*100`%** for plain Naive Bayes and **`r confMatNBpca$overall[1]*100`%** for Naive Bayes with PCA pre-processing.
 
-### Support Vector Machines
-with radial basis function kernel, do PCA, method="svmRadial"
+### Linear and Quadratic Discriminant Analysis
+Our final set of methods of classification is linear and quadratic discriminant analysis. This will form linear or quadratic decision boundaries in the input feature space. These are determined by fitting multivariate Guassians to each class. Linear discriminant analysis requires that they all use the same covariance matrix, while quadratic discriminant analysis allows the covariances to vary. We then repeat these methods using PCA pre-processing.
+```{r,cache=TRUE}
+set.seed(31269)
+modLDA <- train(classe~., data=trainDat, method="lda", trControl = trainControl(method = "cv", number = 10))
+set.seed(1448)
+modLDApca <- train(classe~., data=trainDat, method="lda", preProcess = "pca", trControl = trainControl(method = "cv", number = 10))
+set.seed(57348)
+modQDA <- train(classe~., data=trainDat, method="qda", trControl = trainControl(method = "cv", number = 10))
+set.seed(342)
+modQDApca <- train(classe~., data=trainDat, method="qda", preProcess = "pca", trControl = trainControl(method = "cv", number = 10))
+```
 
-### Neural Networks
-deep neural nets with method="dnn"
-stacked autoencoder with dropout
+These four models are now evaluated on the test data set in order for proper comparison to the other results.
+```{r,cache=TRUE}
+confMatLDA <- confusionMatrix(testDat$classe,predict(modLDA,testDat))
+confMatLDApca <- confusionMatrix(testDat$classe,predict(modLDApca,testDat))
+confMatQDA <- confusionMatrix(testDat$classe,predict(modQDA,testDat))
+confMatQDApca <- confusionMatrix(testDat$classe,predict(modQDApca,testDat))
+```
+```{r,cache=TRUE,echo=FALSE}
+confMatLDA
+confMatLDApca
+confMatQDA
+confMatQDApca
+```
+We see an accuracy of **`r confMatLDA$overall[1]*100`%** for linear discriminant analysis and **`r confMatLDApca$overall[1]*100`%** for LDA with PCA pre-processing; we see an accuracy of **`r confMatQDA$overall[1]*100`%** for quadratic discriminant analysis and **`r confMatQDApca$overall[1]*100`%** for QDA with PCA pre-processing.
+
+## ROC analysis of Best Classifier
+Before making predictions on the 20 test cases, we look at the receiver operating characteristic (ROC) curve from our best model. This shows the true positive rate vs the false positive rate as a function of the classification threshold.
 
 ## Predictions on 20 Test Cases
-
+don't forget to print to file for submission!
 
 ## Conclusions
-
+PCA does worse as it keeps only 95% of variance by default and extra 5% will be important it seems.
