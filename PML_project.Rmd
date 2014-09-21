@@ -71,25 +71,27 @@ Our first look at the data is to simply histogram the occurrences of each lift m
 ```{r,cache=TRUE,echo=FALSE,classe_hist}
 qplot(training$classe,xlab = "Lift Method",ylab = "Frequency", main = "Distribution of Lift Methods in Training Data")
 ```
+
 Although method A is slightly over-represented compared to the others, it is not so drastic that it will cause problems in the training.
 
-We then make a scatter plot of a few of the variables, in particular those from the accelerometers in the arms of the participants. The different methods are distinguished by color and it is clear from these that no simple relationship between the observed variables exists and more complex models will be needed.
+We then make a scatter plot of a few of the variables, in particular those from the accelerometers in the arms of the participants. The different methods are distinguished by color and it is clear from these that no simple relationship between the observed variables exists and more complex models will be needed. A random subset of 5% of the training data is used so that the points are visible.
 
 ```{r,cache=TRUE,echo=FALSE,pairs_plot}
-featurePlot(x=training[,grep("accel_arm",names(training))],y=training$classe,plot="pairs",main="Scatter Plot of Select Training Data Variables")
-```
-
-For an initial analysis of the complexity of the problem, we begin by creating a subset of a random 5% of the data. With this data, we fit a single decision tree and analyze this to determine how well it performs.
-
-```{r,cache=TRUE,exploratory_tree}
 set.seed(1867)
 smallTrain<-training[createDataPartition(training$classe,p=0.05,list=FALSE),]
+featurePlot(x = smallTrain[,grep("accel_arm",names(smallTrain))], y = smallTrain$classe, plot = "pairs", main = "Scatter Plot of Select Training Data Variables", pch = 20, alpha = 0.25)
+```
+
+For an initial analysis of the complexity of the problem, we use this same small subset of the data and fit a single decision tree. We analyze this to determine how well it performs.
+
+```{r,cache=TRUE,exploratory_tree}
 modExpFit<-train(smallTrain$classe~.,data=smallTrain,method="rpart")
 ```
 ```{r,cache=TRUE,echo=FALSE,exploratory_plot_1}
 fancyRpartPlot(modExpFit$finalModel,sub = "Sample Decision Tree")
 confusionMatrix(smallTrain$classe,predict(modExpFit,smallTrain))
 ```
+
 It is clear from the confusion matrix that this classification method does only moderately well. A more sophisticated approach is required.
 
 ## Fitting Models
@@ -170,21 +172,17 @@ confMatQDA
 ```
 We see an accuracy of **`r confMatLDA$overall[1]*100`%** for linear discriminant analysis and **`r confMatQDA$overall[1]*100`%** for quadratic discriminant analysis. LDA has a 95% confidence interval of (`r confMatLDA$overall[3]*100`%,`r confMatLDA$overall[4]*100`%) and for QDA this is (`r confMatQDA$overall[3]*100`%,`r confMatQDA$overall[4]*100`%).
 
-## ROC analysis of Best Classifier
-Before making predictions on the 20 test cases, we look at the receiver operating characteristic (ROC) curve from our best model. This shows the true positive rate vs the false positive rate as a function of the classification threshold.
-```{r,cache=TRUE,warning=FALSE,plot_ROC}
-require(pROC,quietly=TRUE)
-
-```
-
 ## Predictions on 20 Test Cases
-From the comparisons of predictions on the evaluation data set, we see that the random forests method produced the best results, with greater than 99% accuracy. We then use this to make predictions for the testing data set with its 20 observations.
-```{r,cache=FALSE,test_eval}
-testAnswers <- as.character(predict(modRF,testing[,-53]))
-testAnswers
+From the comparisons of predictions on the evaluation data set, we see that the random forests  and generalized boosting methods produced the best results, with greater than 99% accuracy. We use both to make predictions for the testing data set with its 20 observations.
+```{r,cache=TRUE,test_eval}
+testAnswersRF <- as.character(predict(modRF,testing[,-53]))
+testAnswersGBM <- as.character(predict(modGBM,testing[,-53]))
+testAnswersRF
+testAnswersGBM
 ```
-These are then printed to individual text files for submission.
-```{r,cache=FALSE,echo=FALSE,test_eval_print}
+
+Since these predictions are the same, we feel safe in printing them to individual text files for submission.
+```{r,cache=TRUE,echo=FALSE,test_eval_print}
 pml_write_files <- function(x){
   n = length(x)
   for(i in 1:n){
@@ -192,8 +190,8 @@ pml_write_files <- function(x){
     write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
   }
 }
-pml_write_files(testAnswers)
+pml_write_files(testAnswersRF)
 ```
 
 ## Conclusions
-PCA does worse as it keeps only 95% of variance by default and extra 5% will be important it seems.
+On the whole, it appears that from the methods tested here, those using ensembles of decision trees were able to perform best. Random forests and generalized boosting both performed with over 99% accuracy on the evaluation data set. The other methods did not perform nearly as well, probably due to their inability to model the complex decision boundaries needed for this classification task. It was also found that principal component analysis did not help any of these. This is likely due to poor breakdown into principal components and low compression as many PCs were needed to keep 95% of the variance. Furthermore, the loss of 5% of the variance could be important for borderline cases, thus lowering the accuracy from applying the method to raw data.
