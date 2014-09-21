@@ -1,10 +1,10 @@
 ---
-title: "Practical Machine Learning Course Project:  Weight Lifting Exercise"
+title: 'Practical Machine Learning Course Project:  Weight Lifting Exercise'
 author: "Philip Graff"
-date: "September 15, 2014"
+date: "September 21, 2014"
 output:
   html_document:
-    keep_md: true
+    keep_md: yes
     toc: yes
 ---
 
@@ -67,17 +67,20 @@ This leaves us with 52 predictor variables to use to predict the 'classe' variab
 
 ## Exploratory Analysis
 Our first look at the data is to simply histogram the occurrences of each lift method in the training data. This will show us if any are over- or under-represented.
+
 ```{r,cache=TRUE,echo=FALSE,classe_hist}
 qplot(training$classe,xlab = "Lift Method",ylab = "Frequency", main = "Distribution of Lift Methods in Training Data")
 ```
 Although method A is slightly over-represented compared to the others, it is not so drastic that it will cause problems in the training.
 
 We then make a scatter plot of a few of the variables, in particular those from the accelerometers in the arms of the participants. The different methods are distinguished by color and it is clear from these that no simple relationship between the observed variables exists and more complex models will be needed.
+
 ```{r,cache=TRUE,echo=FALSE,pairs_plot}
 featurePlot(x=training[,grep("accel_arm",names(training))],y=training$classe,plot="pairs",main="Scatter Plot of Select Training Data Variables")
 ```
 
 For an initial analysis of the complexity of the problem, we begin by creating a subset of a random 5% of the data. With this data, we fit a single decision tree and analyze this to determine how well it performs.
+
 ```{r,cache=TRUE,exploratory_tree}
 set.seed(1867)
 smallTrain<-training[createDataPartition(training$classe,p=0.05,list=FALSE),]
@@ -103,10 +106,10 @@ trainEval <- training[-inTrain,]
 In this report we use the accuracy as our figure of merit. This is simply 1-Err, where Err is the out-of-bag error on predictions. Confidence intervals for accuracy/error measures are obtained by performing 10-fold cross-validation in all cases.
 
 ### Random Forests
-The first model we train on the data is a random forest. We use 10-fold cross-validation for model fitting, where in each fold 90% of data is used for training and the remaining 10% for evaluation. The default settings for the random forest use 500 trees and a few settings of mtry, which determines the number of parameters considered at each node in the tree. The statistics on this model fit are displayed below and we see that the random forest performs very well.
+The first model we train on the data is a random forest. We use 5-fold cross-validation for model fitting, where in each fold 80% of data is used for training and the remaining 20% for evaluation. The default settings for the random forest use 500 trees. Through exploratory analysis, it was found that mtry=27 was optimal, where mtry is the number of parameters considered at each node of a tree. The statistics on this model fit are displayed below and we see that the random forest performs very well.
 ```{r,cache=TRUE,rf_fit}
 set.seed(12345)
-modRF <- train(classe~., data=trainDat, method = "rf", trControl = trainControl(method = "cv", number = 10))
+modRF <- train(classe~., data=trainDat, method = "rf", tuneGrid = expand.grid(mtry = c(2,15,27,39,52)), trControl = trainControl(method = "cv", number = 5))
 modRF
 ```
 
@@ -118,10 +121,10 @@ confMatRF
 We see an accuracy of **`r confMatRF$overall[1]*100`%** for the random forest method with a 95% confidence interval of (`r confMatRF$overall[3]*100`%,`r confMatRF$overall[4]*100`%).
 
 ### Generalized Boosted Modeling with Trees
-The next model to fit to the data involves boosted decision trees via the GBM method. This will train many decision trees sequentially, each time increasing the weight of data points predicted incorrectly the previous time and decreasing those that were predicted correctly. By combining the many trees, this produces a stronger predictor. Furthermore, GBM uses greedy selection of basis functions to improve classification. Cross-validation is used with 10 folds.
+The next model to fit to the data involves boosted decision trees via the GBM method. This will train many decision trees sequentially, each time increasing the weight of data points predicted incorrectly the previous time and decreasing those that were predicted correctly. By combining the many trees, this produces a stronger predictor. Furthermore, GBM uses greedy selection of basis functions to improve classification. Cross-validation is used with 5 folds.
 ```{r,cache=TRUE,gbm_fit}
 set.seed(54321)
-modGBM <- train(classe~., data=trainDat, method="gbm", verbose = FALSE, tuneGrid = expand.grid(n.trees=seq(100,500,by=100),interaction.depth=seq(1,5),shrinkage=0.1), trControl = trainControl(method = "cv", number = 10))
+modGBM <- train(classe~., data=trainDat, method="gbm", tuneGrid = expand.grid(n.trees=seq(100,500,by=100),interaction.depth=seq(1,5),shrinkage=0.1), verbose = FALSE, trControl = trainControl(method = "cv", number = 5))
 modGBM
 ```
 
@@ -134,15 +137,14 @@ We see an accuracy of **`r confMatGBM$overall[1]*100`%** for generalized boosted
 
 ### Naive Bayes
 The next machine learning method that we try is Naive Bayes. In this, each variable is assumed to be independent to fit a probability density model to the training data. In addition to training using the raw parameter values, a fit using principal component analysis pre-processing was done. This did not perform as well, potentially due to PCA only conserving 95% of the variance of the original data and only minial reduction in input dimension. The PCA pre-processed fit is thus omitted here.
-```{r,cache=TRUE,nb_fit}
-nbGrid <- expand.grid(fL=c(0,3),usekernel=c(FALSE,TRUE))
+```{r,cache=TRUE,warning=FALSE,nb_fit}
 set.seed(9069)
-modNB <- train(classe~., data=trainDat, method="nb", tuneGrid = nbGrid, trControl = trainControl(method = "cv", number = 10))
+modNB <- train(classe~., data=trainDat, method="nb", tuneGrid = expand.grid(fL=c(0,3),usekernel=c(FALSE,TRUE)), trControl = trainControl(method = "cv", number = 5))
 modNB
 ```
 
 These two Naive Bayes models are now evaluated on the test data set in order for proper comparison to the other results.
-```{r,cache=TRUE,nb_confmat}
+```{r,cache=TRUE,warning=FALSE,nb_confmat}
 confMatNB <- confusionMatrix(trainEval$classe,predict(modNB,trainEval))
 confMatNB
 ```
@@ -152,9 +154,9 @@ We see an accuracy of **`r confMatNB$overall[1]*100`%** for Naive Bayes, with a 
 Our final set of methods of classification is linear and quadratic discriminant analysis. This will form linear or quadratic decision boundaries in the input feature space. These are determined by fitting multivariate Guassians to each class. Linear discriminant analysis requires that they all use the same covariance matrix, while quadratic discriminant analysis allows the covariances to vary. These fits were repeated with PCA pre-processing, but as with Naive Bayes there was actually a reduction in the performance so they are omitted here.
 ```{r,cache=TRUE,lda_fit}
 set.seed(31269)
-modLDA <- train(classe~., data=trainDat, method="lda", trControl = trainControl(method = "cv", number = 10))
+modLDA <- train(classe~., data=trainDat, method="lda", trControl = trainControl(method = "cv", number = 5))
 set.seed(57348)
-modQDA <- train(classe~., data=trainDat, method="qda", trControl = trainControl(method = "cv", number = 10))
+modQDA <- train(classe~., data=trainDat, method="qda", trControl = trainControl(method = "cv", number = 5))
 modLDA
 modQDA
 ```
@@ -170,15 +172,19 @@ We see an accuracy of **`r confMatLDA$overall[1]*100`%** for linear discriminant
 
 ## ROC analysis of Best Classifier
 Before making predictions on the 20 test cases, we look at the receiver operating characteristic (ROC) curve from our best model. This shows the true positive rate vs the false positive rate as a function of the classification threshold.
+```{r,cache=TRUE,warning=FALSE,plot_ROC}
+require(pROC,quietly=TRUE)
+
+```
 
 ## Predictions on 20 Test Cases
 From the comparisons of predictions on the evaluation data set, we see that the random forests method produced the best results, with greater than 99% accuracy. We then use this to make predictions for the testing data set with its 20 observations.
-```{r,cache=TRUE,test_eval}
-testAnswers <- as.character(predict(modRF$best.model,testing[,-53]))
+```{r,cache=FALSE,test_eval}
+testAnswers <- as.character(predict(modRF,testing[,-53]))
 testAnswers
 ```
 These are then printed to individual text files for submission.
-```{r,cache=TRUE,echo=FALSE,test_eval_print}
+```{r,cache=FALSE,echo=FALSE,test_eval_print}
 pml_write_files <- function(x){
   n = length(x)
   for(i in 1:n){
